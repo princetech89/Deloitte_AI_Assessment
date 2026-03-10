@@ -2,7 +2,7 @@
 # Deloitte Graduate Hiring Assessment
 
 Name: Prince Chourasiya  
-Email: your_email@gmail.com  
+Email: chourasiya8919@gmail.com  
 College: Malla Reddy College of Engineering and Technology  
 Track: AI & Machine Learning  
 
