@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>LSTM Stock Analysis Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+
+<body>
+    <div class="nav">
+        <div class="logo">📈 StockViz AI.</div>
+        <div class="badge">LSTM PREDICTIVE INTELLIGENCE</div>
+    </div>
+
+    <div class="dashboard-content">
+        <!-- Top Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="label">DATASET</div>
+                <div class="value range">{{ data.dataset_name }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">DATE RANGE</div>
+                <div class="value range">{{ data.date_range }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">TRADING DAYS</div>
+                <div class="value">{{ data.trading_days }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">MODEL RMSE</div>
+                <div class="value highlight-blue">{{ data.rmse }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="label">MODEL TYPE</div>
+                <div class="value highlight-green">LSTM</div>
+            </div>
+        </div>
+
+        <!-- Section 1: EDA -->
+        <div class="section-title">
+            <h2>Phase 1 & 2: EDA & Preprocessing</h2>
+        </div>
+
+        <div class="bottom-grid">
+            <!-- Trend Chart -->
+            <div class="card graph-card">
+                <div class="card-header">
+                    <h3>Trend Analysis</h3>
+                    <span class="pill">EDA</span>
+                </div>
+                <div id="trendChart" class="plot-container"></div>
+            </div>
+
+            <!-- Moving Averages Chart -->
+            <div class="card graph-card">
+                <div class="card-header">
+                    <h3>Moving Averages (50 & 200 Day)</h3>
+                    <span class="pill">SMOOTHING</span>
+                </div>
+                <div id="maChart" class="plot-container"></div>
+            </div>
+        </div>
+
+        <div class="bottom-grid">
+            <!-- Volatility Analysis Line Chart -->
+            <div class="card graph-card">
+                <div class="card-header">
+                    <h3>Volatility (Daily Returns)</h3>
+                    <span class="pill">RISK</span>
+                </div>
+                <div id="volChart" class="plot-container"></div>
+            </div>
+
+            <!-- Volatility Histogram -->
+            <div class="card graph-card">
+                <div class="card-header">
+                    <h3>Return Distribution Histogram</h3>
+                    <span class="pill">DISTRIBUTION</span>
+                </div>
+                <div id="volhistChart" class="plot-container"></div>
+            </div>
+        </div>
+
+        <!-- Correlation Heatmap -->
+        <div class="card graph-card full-width">
+            <div class="card-header">
+                <h3>Feature Correlation Heatmap</h3>
+                <span class="pill">FEATURES</span>
+            </div>
+            <div id="corrChart" class="plot-container"></div>
+        </div>
+
+        <!-- Section 2: LSTM Prediction -->
+        <div class="section-title">
+            <h2>Phase 3 & 4: LSTM Model Evaluation</h2>
+        </div>
+
+        <!-- LSTM Prediction Chart -->
+        <div class="card graph-card full-width">
+            <div class="card-header">
+                <h3>Prediction vs Actual Price (Test Split)</h3>
+                <span class="pill">LSTM FORECAST</span>
+            </div>
+            <div id="predChart" class="plot-container large-plot"></div>
+        </div>
+
+        <div class="footer-actions">
+            <a href="/" class="btn-outline">Upload Another File / Ticker</a>
+        </div>
+    </div>
+
+    <!-- Injecting JSON data safely using JSON script tags to avoid IDE syntax highlighting errors -->
+    <script id="trend-data" type="application/json">{{ data.trend_chartJSON | safe }}</script>
+    <script id="ma-data" type="application/json">{{ data.ma_chartJSON | safe }}</script>
+    <script id="vol-data" type="application/json">{{ data.vol_chartJSON | safe }}</script>
+    <script id="volhist-data" type="application/json">{{ data.volhist_chartJSON | safe }}</script>
+    <script id="corr-data" type="application/json">{{ data.corr_chartJSON | safe }}</script>
+    <script id="pred-data" type="application/json">{{ data.pred_chartJSON | safe }}</script>
+
+    <script>
+        var layoutUpdate = {
+            autosize: true,
+            margin: { t: 40, b: 30, l: 50, r: 20 },
+            font: { color: "#f8fafc" }
+        };
+
+        // Parse the JSON blocks above, which hides the unparseable Jinja brackets from your IDE's JS parser
+        var trendJson = JSON.parse(document.getElementById('trend-data').textContent);
+        var maJson = JSON.parse(document.getElementById('ma-data').textContent);
+        var volJson = JSON.parse(document.getElementById('vol-data').textContent);
+        var volhistJson = JSON.parse(document.getElementById('volhist-data').textContent);
+        var corrJson = JSON.parse(document.getElementById('corr-data').textContent);
+        var predJson = JSON.parse(document.getElementById('pred-data').textContent);
+
+        Plotly.newPlot('trendChart', trendJson.data, trendJson.layout, { responsive: true });
+        Plotly.newPlot('maChart', maJson.data, maJson.layout, { responsive: true });
+        Plotly.newPlot('volChart', volJson.data, volJson.layout, { responsive: true });
+        Plotly.newPlot('volhistChart', volhistJson.data, volhistJson.layout, { responsive: true });
+        Plotly.newPlot('corrChart', corrJson.data, corrJson.layout, { responsive: true });
+        Plotly.newPlot('predChart', predJson.data, predJson.layout, { responsive: true });
+    </script>
+</body>
+
+</html>

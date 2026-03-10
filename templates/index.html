@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>StockViz - AI Analysis</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div class="nav">
+    <div class="logo">📈 StockViz.</div>
+    <div class="badge">STOCK MARKET INTELLIGENCE</div>
+  </div>
+
+  <div class="upload-container">
+    <h2>Analyze Stock Trends with AI Intelligence</h2>
+    <p>Upload your historical stock CSV or enter a ticker symbol to scrape from Yahoo Finance.</p>
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash-messages">
+      {% for msg in messages %}
+      <p class="error-msg">{{ msg }}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <form method="post" enctype="multipart/form-data" class="upload-form">
+      <div class="input-group">
+        <label>Stock Ticker Symbol (e.g., AAPL)</label>
+        <input type="text" name="ticker" placeholder="Enter ticker symbol...">
+      </div>
+
+      <div class="divider">OR</div>
+
+      <div class="input-group">
+        <label>Upload CSV File</label>
+        <input type="file" name="file" accept=".csv">
+      </div>
+
+      <button type="submit" class="btn-primary"
+        onclick="this.innerHTML='Processing Data & AI Model (takes ~10 seconds)...'; this.classList.add('loading');">Start
+        Dashboard Analysis</button>
+    </form>
+  </div>
+</body>
+
+</html>
