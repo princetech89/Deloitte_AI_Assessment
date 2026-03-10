@@ -1,4 +1,5 @@
-# Deloitte Graduate Hiring Assessment - StockViz AI
+<<<<<<< HEAD
+# Deloitte Graduate Hiring Assessment
 
 Name: Prince Chourasiya  
 Email: your_email@gmail.com  
@@ -22,7 +23,7 @@ This project is a high-performance **Stock Market Analysis & Prediction Dashboar
   - **Dynamic Price Charts**: Actual vs. Predicted trends with synced moving averages.
   - **Performance Evaluation**: Live Confusion Matrix, Precision/Recall metrics, and ROC Curve analysis.
 - **Premium UX/UI**: 
-  - Modern **Glassmorphism** design with dark-mode optimized aesthetics.
+  - Modern **Glass morphism** design with dark-mode optimized aesthetics.
   - Fully responsive layout with high-visibility **Outfit** typography.
 
 ## Technology Stack
@@ -30,8 +31,8 @@ This project is a high-performance **Stock Market Analysis & Prediction Dashboar
 - **ML/DS**: Scikit-learn, Pandas, NumPy
 - **Web Backend**: Flask
 - **Data Viz**: Plotly.js (Interactive), Matplotlib
-- **External APIs**: yfinance (Yahoo Finance)
-- **UI Architecture**: Premium CSS (Glassmorphism, CSS Variables, Flex/Grid)
+- **External APIs**: finance (Yahoo Finance)
+- **UI Architecture**: Premium CSS (Glass morphism, CSS Variables, Flex/Grid)
 
 ## How to Run
 1. Install dependencies:
@@ -45,3 +46,4 @@ This project is a high-performance **Stock Market Analysis & Prediction Dashboar
 3. Open your browser and navigate to: `http://localhost:5001`
 
 *(Note: The interface is optimized for modern browsers like Chrome or Edge)*
+=======
