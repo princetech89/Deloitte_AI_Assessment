@@ -71,8 +71,8 @@ def process_data(df):
     # Daily Returns (Volatility)
     df['Daily_Return'] = df['Close'].pct_change()
     
-    df.fillna(method='ffill', inplace=True)
-    df.fillna(method='bfill', inplace=True)
+    df.ffill(inplace=True)
+    df.bfill(inplace=True)
     df.dropna(inplace=True)
     
     return df
