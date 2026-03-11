@@ -10,7 +10,6 @@ from werkzeug.utils import secure_filename
 
 import pandas as pd
 import numpy as np
-import yfinance as yf
 from flask import Flask, render_template, request, flash
 
 from config import (
@@ -18,7 +17,6 @@ from config import (
     MAX_FILE_SIZE, ALLOWED_EXTENSIONS, YFINANCE_PERIOD
 )
 from logger import setup_logger
-from ai_model import build_dashboard_data
 
 # Setup
 np.bool = np.bool_
@@ -52,6 +50,7 @@ def fetch_ticker_data(ticker: str) -> Optional[pd.DataFrame]:
         ValueError: If ticker data cannot be fetched
     """
     try:
+        import yfinance as yf
         log.info(f"Fetching data for ticker: {ticker}")
         df = yf.download(ticker, period=YFINANCE_PERIOD, progress=False)
         df.reset_index(inplace=True)
@@ -92,6 +91,12 @@ def load_csv_data(file) -> Optional[pd.DataFrame]:
         raise ValueError(f"Failed to process CSV file: {str(e)}")
 
 
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint for deployment monitoring."""
+    return {"status": "ok", "app": "StockViz"}, 200
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     """Main index route - handles data input and dashboard generation."""
@@ -122,6 +127,8 @@ def index():
             # Generate dashboard
             if df is not None and not df.empty:
                 log.info(f"Generating dashboard for {dataset_name}")
+                # Lazy import: only load TensorFlow when processing data
+                from ai_model import build_dashboard_data
                 data = build_dashboard_data(df, dataset_name)
                 return render_template('dashboard.html', data=data)
             
