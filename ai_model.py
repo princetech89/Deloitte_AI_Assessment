@@ -1,104 +1,197 @@
-import pandas as pd
-import numpy as np
-np.bool = np.bool_
+"""
+AI Model module - Core machine learning pipeline for stock price prediction.
+Includes data preprocessing, LSTM model training, and visualization generation.
+"""
 
 import json
 import warnings
-warnings.filterwarnings('ignore')
+from typing import Tuple, Dict, Any
 
-def clean_numeric(series):
+import pandas as pd
+import numpy as np
+import plotly.graph_objs as go
+import plotly.express as px
+import plotly.utils
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dropout, Dense
+
+from config import (
+    MIN_DATA_ROWS, SEQUENCE_LENGTH, TRAIN_TEST_SPLIT,
+    LSTM_EPOCHS, LSTM_BATCH_SIZE, LSTM_UNITS_LAYER_1, LSTM_UNITS_LAYER_2,
+    LSTM_DROPOUT, LSTM_OPTIMIZER, LSTM_LOSS, MOVING_AVERAGE_SHORT,
+    MOVING_AVERAGE_LONG, ROLLING_MEAN_WINDOW, LAG_FEATURES, PLOTLY_TEMPLATE
+)
+from logger import setup_logger
+
+np.bool = np.bool_
+warnings.filterwarnings('ignore')
+log = setup_logger(__name__)
+
+def clean_numeric(series: pd.Series) -> pd.Series:
+    """
+    Convert series to numeric, handling currency symbols and other non-numeric characters.
+    
+    Args:
+        series: Pandas Series to convert
+        
+    Returns:
+        Numeric series with non-numeric values converted to NaN
+    """
     if series.dtype == object:
         return pd.to_numeric(series.astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
     return pd.to_numeric(series, errors='coerce')
 
-def process_data(df):
+def _find_date_column(df: pd.DataFrame) -> str:
+    """Find date column in DataFrame columns or index."""
+    # Check columns
+    for col in df.columns:
+        if 'date' in col.lower() or 'time' in col.lower():
+            return col
+    
+    # Check index
+    if df.index.name and ('date' in str(df.index.name).lower() or 'time' in str(df.index.name).lower()):
+        return None  # Signal to use index
+    
+    return None
+
+
+def _set_date_index(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
+    """Parse date column and set as index."""
+    df[date_col] = pd.to_datetime(df[date_col], utc=True, errors='coerce')
+    df.dropna(subset=[date_col], inplace=True)
+    df.sort_values(date_col, inplace=True)
+    df.set_index(date_col, inplace=True)
+    return df
+
+
+def _normalize_timezone(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove timezone information from DatetimeIndex."""
+    if isinstance(df.index, pd.DatetimeIndex):
+        df.index = df.index.tz_localize(None) if df.index.tz is None else df.index.tz_convert(None)
+    return df
+
+
+def _find_target_column(df: pd.DataFrame) -> str:
+    """Find target column (Close price) in DataFrame."""
+    target_candidates = ['Close', 'Adj Close', 'Price', 'Last']
+    
+    for candidate in target_candidates:
+        if candidate in df.columns:
+            log.info(f"Found target column: {candidate}")
+            return candidate
+    
+    # Fallback: find first numeric column with enough data
+    for col in df.columns:
+        numeric_col = clean_numeric(df[col])
+        if numeric_col.notna().sum() > 10:
+            log.info(f"Auto-detected target column: {col}")
+            return col
+    
+    raise ValueError("No Close/Price column found in data")
+
+
+def process_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Process and prepare data for LSTM model.
+    
+    Includes:
+    - MultiIndex column flattening
+    - Date parsing and indexing
+    - Target column detection
+    - Feature engineering (MAs, returns, lags)
+    - Missing value imputation
+    
+    Args:
+        df: Raw input DataFrame
+        
+    Returns:
+        Processed DataFrame ready for LSTM
+        
+    Raises:
+        ValueError: If data processing fails
+    """
+    # Flatten MultiIndex columns
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
     
+    # Standardize column names
     df.columns = [str(c).title() for c in df.columns]
-
-    date_col = None
-    for col in df.columns:
-        if 'Date' in col or 'Time' in col:
-            date_col = col
-            break
-            
+    
+    # Handle date column
+    date_col = _find_date_column(df)
     if date_col:
-        df[date_col] = pd.to_datetime(df[date_col], utc=True, errors='coerce')
-        df.dropna(subset=[date_col], inplace=True)
-        df.sort_values(date_col, inplace=True)
-        df.set_index(date_col, inplace=True)
-    elif df.index.name is not None and ('Date' in str(df.index.name).title() or 'Time' in str(df.index.name).title()):
+        df = _set_date_index(df, date_col)
+    elif df.index.name and ('date' in str(df.index.name).lower() or 'time' in str(df.index.name).lower()):
         df.index = pd.to_datetime(df.index, utc=True, errors='coerce')
-        df.dropna(how='all', inplace=False)
         df = df[df.index.notnull()]
         df.sort_index(inplace=True)
-        
-    if isinstance(df.index, pd.DatetimeIndex):
-        df.index = df.index.tz_localize(None) if df.index.tz is None else df.index.tz_convert(None)
-
-    target_candidates = ['Close', 'Adj Close', 'Price', 'Last']
-    found_target = None
-    for cand in target_candidates:
-        if cand in df.columns:
-            found_target = cand
-            break
-            
-    if not found_target:
-        for col in df.columns:
-            temp = clean_numeric(df[col])
-            if temp.notna().sum() > 10:
-                df['Close'] = temp
-                found_target = 'Close'
-                break
-    else:
-        df['Close'] = clean_numeric(df[found_target])
-
+    
+    df = _normalize_timezone(df)
+    
+    # Find and normalize target column
+    target_col = _find_target_column(df)
+    df['Close'] = clean_numeric(df[target_col])
     df.dropna(subset=['Close'], inplace=True)
     
-    # Phase 2: Feature Engineering
-    # Lag Features
-    df['Close_t-1'] = df['Close'].shift(1)
-    df['Close_t-2'] = df['Close'].shift(2)
+    # Feature Engineering - Phase 2
+    # Lag features
+    for lag in LAG_FEATURES:
+        df[f'Close_t-{lag}'] = df['Close'].shift(lag)
     
-    # Rolling Statistics
-    df['Rolling_Mean_7'] = df['Close'].rolling(window=7, min_periods=1).mean()
+    # Rolling statistics
+    df['Rolling_Mean_7'] = df['Close'].rolling(window=ROLLING_MEAN_WINDOW, min_periods=1).mean()
     
-    # Phase 1: Moving Averages (50-Day and 200-Day)
-    df['MA_50'] = df['Close'].rolling(window=50, min_periods=1).mean()
-    df['MA_200'] = df['Close'].rolling(window=200, min_periods=1).mean()
+    # Moving averages
+    df['MA_50'] = df['Close'].rolling(window=MOVING_AVERAGE_SHORT, min_periods=1).mean()
+    df['MA_200'] = df['Close'].rolling(window=MOVING_AVERAGE_LONG, min_periods=1).mean()
     
-    # Daily Returns (Volatility)
+    # Daily returns (volatility)
     df['Daily_Return'] = df['Close'].pct_change()
     
+    # Handle missing values
     df.ffill(inplace=True)
     df.bfill(inplace=True)
     df.dropna(inplace=True)
     
+    log.info(f"Data processing complete: {len(df)} rows, {len(df.columns)} columns")
     return df
 
-def create_sequences(data, seq_length):
+def create_sequences(data: np.ndarray, seq_length: int) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Create sequences for LSTM training.
+    
+    Args:
+        data: Input data array (2D)
+        seq_length: Sequence length in time steps
+        
+    Returns:
+        Tuple of (X sequences, y targets)
+    """
     X, y = [], []
     for i in range(len(data) - seq_length):
         X.append(data[i:(i + seq_length), 0])
         y.append(data[i + seq_length, 0])
     return np.array(X), np.array(y)
 
-def build_dashboard_data(raw_df, name=""):
-    import plotly.graph_objs as go
-    import plotly.express as px
-    import plotly.utils
-    from tensorflow.keras.models import Sequential
-    from tensorflow.keras.layers import LSTM, Dropout, Dense
-    from sklearn.preprocessing import MinMaxScaler
-    from sklearn.metrics import mean_squared_error
-
+def build_dashboard_data(raw_df: pd.DataFrame, name: str = "") -> Dict[str, Any]:
+    """
+    Build complete dashboard with visualizations and LSTM predictions.
+    
+    Args:
+        raw_df: Raw input DataFrame
+        name: Dataset name for display
+        
+    Returns:
+        Dictionary with charts (JSON) and metrics
+    """
     df = process_data(raw_df.copy())
     
-    if len(df) < 100:
-        raise ValueError(f"Insufficient valid data found (found {len(df)} rows). Need at least 100 days of data for LSTM.")
+    if len(df) < MIN_DATA_ROWS:
+        raise ValueError(f"Insufficient data (found {len(df)} rows). Need at least {MIN_DATA_ROWS} days for LSTM.")
         
-    layout_template = 'plotly_dark'
+    layout_template = PLOTLY_TEMPLATE
     common_layout = dict(
         template=layout_template,
         plot_bgcolor='rgba(0,0,0,0)',
@@ -146,40 +239,33 @@ def build_dashboard_data(raw_df, name=""):
     scaled_data = scaler.fit_transform(data_values)
 
     # Sequence Generation
-    seq_length = 60
     dataset_len = len(scaled_data)
     
-    # Phase 4: Data Splitting (First 80% Train, Last 20% Test)
-    train_data_len = int(np.ceil(dataset_len * .8))
+    # Phase 4: Data Splitting (Train/Test split)
+    train_data_len = int(np.ceil(dataset_len * TRAIN_TEST_SPLIT))
     train_data = scaled_data[0:train_data_len, :]
     
-    x_train, y_train = create_sequences(train_data, seq_length)
+    x_train, y_train = create_sequences(train_data, SEQUENCE_LENGTH)
     x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
     # Phase 3: Train LSTM
+    log.info("Training LSTM model...")
     model = Sequential()
-    # Layer 1: 50 units, returns sequences
-    model.add(LSTM(50, return_sequences=True, input_shape=(x_train.shape[1], 1)))
-    # Layer 2: 50 units, does not return
-    model.add(LSTM(50, return_sequences=False))
-    # Dropout 20%
-    model.add(Dropout(0.2))
-    # Dense output
+    model.add(LSTM(LSTM_UNITS_LAYER_1, return_sequences=True, input_shape=(x_train.shape[1], 1)))
+    model.add(LSTM(LSTM_UNITS_LAYER_2, return_sequences=False))
+    model.add(Dropout(LSTM_DROPOUT))
     model.add(Dense(1))
 
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    
-    # 50 Epochs, batch size 32 (In production this might be slow, using 10 epochs for faster rendering, but adhering to pipeline)
-    # Using small epochs due to interactive execution
-    epochs = 10 
-    model.fit(x_train, y_train, batch_size=32, epochs=epochs, verbose=0)
+    model.compile(optimizer=LSTM_OPTIMIZER, loss=LSTM_LOSS)
+    model.fit(x_train, y_train, batch_size=LSTM_BATCH_SIZE, epochs=LSTM_EPOCHS, verbose=0)
+    log.info("LSTM training complete")
 
     # Test Data creation
-    test_data = scaled_data[train_data_len - seq_length:, :]
+    test_data = scaled_data[train_data_len - SEQUENCE_LENGTH:, :]
     x_test = []
     y_test_real = data_values[train_data_len:, :]
-    for i in range(seq_length, len(test_data)):
-        x_test.append(test_data[i-seq_length:i, 0])
+    for i in range(SEQUENCE_LENGTH, len(test_data)):
+        x_test.append(test_data[i-SEQUENCE_LENGTH:i, 0])
         
     x_test = np.array(x_test)
     x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
